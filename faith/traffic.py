@@ -5,6 +5,7 @@ import sys
 import tensorflow as tf
 
 from sklearn.model_selection import train_test_split
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 EPOCHS = 10
 IMG_WIDTH = 30
@@ -28,20 +29,32 @@ def main():
         np.array(images), np.array(labels), test_size=TEST_SIZE
     )
 
+    # Data augmentation
+    datagen = ImageDataGenerator(
+        rotation_range=10,
+        width_shift_range=0.1,
+        height_shift_range=0.1,
+        zoom_range=0.1,
+        horizontal_flip=False
+    )
+    datagen.fit(x_train)
+
     # Get a compiled neural network
     model = get_model()
 
-    # Fit model on training data
-    model.fit(x_train, y_train, epochs=EPOCHS)
+    # Fit model on augmented training data
+    model.fit(datagen.flow(x_train, y_train, batch_size=32), epochs=EPOCHS, validation_data=(x_test, y_test))
 
     # Evaluate neural network performance
-    model.evaluate(x_test,  y_test, verbose=2)
+    model.evaluate(x_test, y_test, verbose=2)
 
     # Save model to file
     if len(sys.argv) == 3:
         filename = sys.argv[2]
-        model.save(filename)
-        print(f"Model saved to {filename}.")
+    else:
+        filename = "traffic_model.h5"  # Default filename
+    model.save(filename)
+    print(f"Model saved to {filename}.")
 
 
 def load_data(data_dir):
@@ -83,11 +96,15 @@ def get_model():
         tf.keras.layers.Conv2D(64, (3, 3), activation="relu"),
         tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
 
+        # Third convolutional layer with 128 filters
+        tf.keras.layers.Conv2D(128, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
+
         # Flatten the output
         tf.keras.layers.Flatten(),
 
-        # Add a dense hidden layer with 128 units
-        tf.keras.layers.Dense(128, activation="relu"),
+        # Add a dense hidden layer with 256 units
+        tf.keras.layers.Dense(256, activation="relu"),
         tf.keras.layers.Dropout(0.5),
 
         # Output layer with NUM_CATEGORIES units
