@@ -6,8 +6,9 @@ import tensorflow as tf
 
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import LearningRateScheduler
 
-EPOCHS = 10
+EPOCHS = 20
 IMG_WIDTH = 30
 IMG_HEIGHT = 30
 NUM_CATEGORIES = 43
@@ -29,6 +30,10 @@ def main():
         np.array(images), np.array(labels), test_size=TEST_SIZE
     )
 
+    # Normalize the dataset
+    x_train = x_train / 255.0
+    x_test = x_test / 255.0
+
     # Data augmentation
     datagen = ImageDataGenerator(
         rotation_range=10,
@@ -39,11 +44,25 @@ def main():
     )
     datagen.fit(x_train)
 
+    # Learning rate scheduler
+    def lr_schedule(epoch):
+        initial_lr = 0.001
+        drop = 0.5
+        epochs_drop = 5
+        return initial_lr * (drop ** (epoch // epochs_drop))
+
+    lr_scheduler = LearningRateScheduler(lr_schedule)
+
     # Get a compiled neural network
     model = get_model()
 
     # Fit model on augmented training data
-    model.fit(datagen.flow(x_train, y_train, batch_size=32), epochs=EPOCHS, validation_data=(x_test, y_test))
+    model.fit(
+        datagen.flow(x_train, y_train, batch_size=32),
+        epochs=EPOCHS,
+        validation_data=(x_test, y_test),
+        callbacks=[lr_scheduler]
+    )
 
     # Evaluate neural network performance
     model.evaluate(x_test, y_test, verbose=2)
@@ -52,7 +71,7 @@ def main():
     if len(sys.argv) == 3:
         filename = sys.argv[2]
     else:
-        filename = "traffic_model.h5"  # Default filename
+        filename = "best_model.h5"  # Default filename
     model.save(filename)
     print(f"Model saved to {filename}.")
 
@@ -88,23 +107,23 @@ def get_model():
     Returns a compiled convolutional neural network model.
     """
     model = tf.keras.models.Sequential([
-        # Convolutional layer with 32 filters, 3x3 kernel, ReLU activation
-        tf.keras.layers.Conv2D(32, (3, 3), activation="relu", input_shape=(IMG_WIDTH, IMG_HEIGHT, 3)),
+        # Convolutional layer with 64 filters
+        tf.keras.layers.Conv2D(64, (3, 3), activation="relu", input_shape=(IMG_WIDTH, IMG_HEIGHT, 3)),
         tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
 
-        # Second convolutional layer with 64 filters
-        tf.keras.layers.Conv2D(64, (3, 3), activation="relu"),
-        tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
-
-        # Third convolutional layer with 128 filters
+        # Second convolutional layer with 128 filters
         tf.keras.layers.Conv2D(128, (3, 3), activation="relu"),
+        tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
+
+        # Third convolutional layer with 256 filters
+        tf.keras.layers.Conv2D(256, (3, 3), activation="relu"),
         tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
 
         # Flatten the output
         tf.keras.layers.Flatten(),
 
-        # Add a dense hidden layer with 256 units
-        tf.keras.layers.Dense(256, activation="relu"),
+        # Add a dense hidden layer with 512 units
+        tf.keras.layers.Dense(512, activation="relu"),
         tf.keras.layers.Dropout(0.5),
 
         # Output layer with NUM_CATEGORIES units
@@ -113,7 +132,7 @@ def get_model():
 
     # Compile the model
     model.compile(
-        optimizer="adam",
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
         loss="categorical_crossentropy",
         metrics=["accuracy"]
     )
